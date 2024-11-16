@@ -1,9 +1,9 @@
 #![allow(warnings)]
 use std::default;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::net::IpAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,6 +28,9 @@ struct Args {
 
     #[arg(short = 'P', long = "port", default_value = "3030")]
     port: u16,
+
+    #[arg(short = 'C', long = "css-file", default_value = "../src/style.css")]
+    css: Option<PathBuf>,
 
     #[arg(short, long)]
     static_mode: bool,
@@ -68,7 +71,7 @@ fn run_static_mode(args: &Args) -> io::Result<()> {
     };
 
     let html_output = render_markdown_to_html(&markdown_input);
-    let style = read_style_css();
+    let style = read_style_css(&args);
     let fonts = read_fonts();
     let html_content = build_full_html(&file_name, &html_output, &style, &fonts, false);
 
@@ -157,7 +160,7 @@ async fn run_server_mode(args: &Args) -> io::Result<()> {
     let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
     let markdown_input = read_markdown_input(&file_path)?;
     let html_output = render_markdown_to_html(&markdown_input);
-    let style = read_style_css();
+    let style = read_style_css(&args);
     let fonts = read_fonts();
     let (tx, _) = broadcast::channel::<()>(100);
     let app_state = Arc::new(AppState {
@@ -242,9 +245,24 @@ fn render_markdown_to_html(markdown_input: &str) -> String {
     html_output
 }
 
-fn read_style_css() -> String {
-    let css_file = include_str!("../src/style.css").to_string();
-    css_file
+fn read_style_css(args: &Args) -> String {
+    let file_path = match &args.css {
+        Some(path) => path.clone(),
+        None => {
+            eprintln!("Error: No CSS file specified.");
+            std::process::exit(1);
+        }
+    };
+    // let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
+    // let css_file = include_str!({file_name}).to_string();
+    // css_file
+    match fs::read_to_string(&file_path) {
+        Ok(css_file) => css_file,
+        Err(e) => {
+            eprintln!("Error reading CSS file: {}", e);
+            std::process::exit(1);
+        }
+    }
 }
 
 struct Fonts {
